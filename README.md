@@ -1,22 +1,16 @@
-## Step1 Ollama 启动 (可选，不启动则 generate 等接口无法使用)
+# Bio-GraphLLM
 
-```
-tmux new-session -s ollama
-ollama serve
+Bio-GraphLLM 用于药物相互作用/药物协同等任务的图-语言模型训练与评估。
 
-tmux new-session -s deepseek
-ollama run deepseek-r1:70b
-```
-其中 tmux 可以新建其他进程，如果需要启动多个大模型（如 QWEN）需要指定暴露在其他端口。
+## 额外需要放入仓库根目录的文件
 
-## Step2 FastAPI 挂载
+以下内容体积较大或含本地数据，已被 `.gitignore` 排除，需要自行放到仓库中：
 
-```
-tmux attach -t api
-python fastapi_server.py
+- `data/raw/`: 原始 DDI、DSP 数据；用于 `synergy/combined.py` 生成混合数据。
+- `data/combined/`: 训练数据，包含 `train/`、`valid/`、`test/`。
+- `dicts/df_rma_landm.tsv`: 细胞系基因表达数据。
+- `modelscope/galactica-1.3b/`: Galactica/OPT 语言模型权重。
+- `bert_pretrained/` 或 `distilbert_pretrained/`: Q-Former/BERT 初始化权重。
+- `gin_pretrained/graphcl_80.pth`: GIN 图编码器预训练权重。
 
-tmux attach -t ngrok
-./ngrok http 8000 (回到根目录执行这句话)
-```
-
-获得 ngrok 的链接后，将其替换 `streamlit_app.py` 中的 API_URL。
+训练输出会写入 `all_checkpoints/`、`logs/`、`result/` 等目录。
