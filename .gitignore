@@ -1,0 +1,86 @@
+# Python / build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Local editors / OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets and local runtime state
+.env
+.env.*
+.gradio/
+certificate.pem
+
+# Logs and experiment outputs
+logs/
+log.txt
+*.log
+result/
+results/
+outputs/
+cancer_outputs/
+runs/
+wandb/
+lightning_logs/
+
+# Checkpoints and trained weights
+all_checkpoints/
+checkpoints/
+checkpoint*/
+*.ckpt
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.pkl
+*.pickle
+
+# Model / pretrained assets
+modelscope
+modelscope/
+bert_pretrained
+gin_pretrained
+distilbert_pretrained/
+pretrained/
+weights/
+
+# Datasets and generated data
+data/
+dicts/
+cancer/
+both/
+combined/
+raw/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.jsonl
+
+# Generated package / service folders
+backend/
+AutoGL.md
+graces/ogb/
+
+# Archives and large binaries
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
