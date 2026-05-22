@@ -11,7 +11,7 @@ from pytorch_lightning import Trainer, strategies
 import pytorch_lightning.callbacks as plc
 from pytorch_lightning.loggers import CSVLogger
 from datamodule.modules import DataModuleCancer, DataModuleCellLine, DataModuleCombined, DataModuleDDI, DataModuleSSI, DataModuleTargetCellLine
-from model.moltc import MolTC
+from model.graphllm import GraphLLM
 from model.nasmodel import GraceModel
 from model.disenmodel import DisenModel
 
@@ -28,15 +28,15 @@ def main(args):
     pl.seed_everything(args.seed)
     # 加载模型
     if args.init_checkpoint:
-        model = MolTC.load_from_checkpoint(args.init_checkpoint, strict=False, args=args)
+        model = GraphLLM.load_from_checkpoint(args.init_checkpoint, strict=False, args=args)
         print(f"loaded init checkpoint from {args.init_checkpoint}")
     elif args.stage2_path:
-        model = MolTC(args)
+        model = GraphLLM(args)
         ckpt = torch.load(args.stage2_path, map_location='cpu')
         model.load_state_dict(ckpt['state_dict'], strict=False)
         print(f"loaded stage2 model from {args.stage2_path}")
     else:
-        model = MolTC(args)
+        model = GraphLLM(args)
 
     # 打印总参数数量
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -108,7 +108,7 @@ def get_args():
     parser.add_argument('--mode', type=str, default='ft')
     parser.add_argument('--strategy_name', type=str, default=None)
     parser.add_argument('--ckpt_path', type=str, default=None)
-    parser = MolTC.add_model_specific_args(parser)
+    parser = GraphLLM.add_model_specific_args(parser)
     parser = DataModuleDDI.add_model_specific_args(parser)
     parser.add_argument('--accelerator', type=str, default='gpu')
     parser.add_argument('--devices', type=str, default='1')

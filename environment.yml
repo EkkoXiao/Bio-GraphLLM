@@ -1,4 +1,4 @@
-name: MolTC
+name: GraphLLM
 channels:
   - pytorch
   - pyg
@@ -299,4 +299,4 @@ dependencies:
 #       - xxhash==3.5.0
 #       - yacs==0.1.8
 #       - yarl==1.14.0
-# prefix: /villa/xlx21/anaconda3/envs/MolTC
+# prefix: /villa/xlx21/anaconda3/envs/GraphLLM

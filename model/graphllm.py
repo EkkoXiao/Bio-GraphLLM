@@ -30,7 +30,7 @@ def get_module_state_dict(state_dict, module_name):
             module_state_dict[key] = value
     return module_state_dict
 
-class MolTC(pl.LightningModule):
+class GraphLLM(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         return super().on_save_checkpoint(checkpoint)
     
