@@ -84,3 +84,6 @@ graces/ogb/
 *.gz
 *.7z
 *.rar
+
+bio_graphllm_api.py
+restart.sh
