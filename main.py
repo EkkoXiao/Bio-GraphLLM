@@ -74,7 +74,7 @@ def main(args):
         elif args.strategy_name == 'deepspeed':
             strategy = strategies.DeepSpeedStrategy(stage=3)
         else:
-            strategy = MyDDPSpawnStrategy(find_unused_parameters=True)
+            strategy = MyDDPSpawnStrategy(find_unused_parameters=not args.combined)
     else:
         device_id = int(args.devices)
         args.devices = 1
@@ -137,7 +137,7 @@ def get_args():
     parser.add_argument('--combined_dsp_question', type=str, default='What is the drug synergy score of this drug pair in this cell line?')
     args, _ = parser.parse_known_args()
 
-    if args.NAS and args.cell:
+    if (args.NAS and args.cell) or args.combined_dsp_ood == 'disen' or args.dsp_ood == 'disen':
         parser = DisenModel.add_model_specific_args(parser)
     else:
         parser = GraceModel.add_model_specific_args(parser)

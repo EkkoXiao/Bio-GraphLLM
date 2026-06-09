@@ -90,7 +90,10 @@ class LaMixedOp(nn.Module):
 
 def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.float64, device=index.device)
-    new_index = index.fill_(index[0]).type(torch.long)
+    new_index = index.type(torch.long)
+    new_index = new_index[(new_index >= 0) & (new_index < size)]
+    if new_index.numel() == 0:
+        new_index = torch.zeros(1, dtype=torch.long, device=index.device)
     mask[new_index] = 1.0
     return mask
 
@@ -319,6 +322,7 @@ class Network(nn.Module):
             virtualnode_embedding = F.dropout(self.mlp_virtualnode_list[i](virtualnode_embedding_temp), self.dropout, training = self.training)
 
     #print(gr[0].size())
+    gr = [g.unsqueeze(0) if g.dim() == 1 else g for g in gr]
     gr = torch.cat(gr, 1)
 
     # x 是所有节点的信息

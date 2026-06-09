@@ -327,11 +327,36 @@ class CombinedTrainCollater:
 
     def _collate_graphs(self, graphs):
         valid = self.collater([g["Valid"] for g in graphs])
+        out = {"Valid": valid}
         if valid.any():
             data = self.collater([g["Graph"] for g in graphs if g["Valid"]])
         else:
             data = None
-        return {"Valid": valid, "Graph": data}
+        out["Graph"] = data
+
+        valid_graphs = [g for g in graphs if g["Valid"]]
+        if valid.any() and any("Transform" in g for g in valid_graphs):
+            transforms = []
+            for g in valid_graphs:
+                if "Transform" in g:
+                    transforms.append(g["Transform"])
+                else:
+                    transformed = g["Graph"].clone()
+                    zeros = torch.zeros(transformed.num_nodes, 2, dtype=torch.float)
+                    transformed.x = torch.cat([zeros, transformed.x.to(torch.float)], dim=1)
+                    transforms.append(transformed)
+            out["Transform"] = self.collater(transforms)
+        if valid.any() and any("Target" in g for g in valid_graphs):
+            targets = []
+            for i, g in enumerate(valid_graphs):
+                target = g.get("Target")
+                if not isinstance(target, torch.Tensor) or target.numel() == 0:
+                    target = torch.zeros(1, 1280, dtype=torch.float)
+                if target.dim() == 1:
+                    target = target.unsqueeze(0)
+                targets.append(Data(x=target.to(torch.float), idx=torch.tensor([i])))
+            out["Target"] = self.collater(targets)
+        return out
 
     def _stack_genes(self, genes):
         stacked = []
@@ -397,11 +422,36 @@ class CombinedInferenceCollater:
 
     def _collate_graphs(self, graphs):
         valid = self.collater([g["Valid"] for g in graphs])
+        out = {"Valid": valid}
         if valid.any():
             data = self.collater([g["Graph"] for g in graphs if g["Valid"]])
         else:
             data = None
-        return {"Valid": valid, "Graph": data}
+        out["Graph"] = data
+
+        valid_graphs = [g for g in graphs if g["Valid"]]
+        if valid.any() and any("Transform" in g for g in valid_graphs):
+            transforms = []
+            for g in valid_graphs:
+                if "Transform" in g:
+                    transforms.append(g["Transform"])
+                else:
+                    transformed = g["Graph"].clone()
+                    zeros = torch.zeros(transformed.num_nodes, 2, dtype=torch.float)
+                    transformed.x = torch.cat([zeros, transformed.x.to(torch.float)], dim=1)
+                    transforms.append(transformed)
+            out["Transform"] = self.collater(transforms)
+        if valid.any() and any("Target" in g for g in valid_graphs):
+            targets = []
+            for i, g in enumerate(valid_graphs):
+                target = g.get("Target")
+                if not isinstance(target, torch.Tensor) or target.numel() == 0:
+                    target = torch.zeros(1, 1280, dtype=torch.float)
+                if target.dim() == 1:
+                    target = target.unsqueeze(0)
+                targets.append(Data(x=target.to(torch.float), idx=torch.tensor([i])))
+            out["Target"] = self.collater(targets)
+        return out
 
     def _stack_genes(self, genes):
         stacked = []
@@ -1323,4 +1373,6 @@ class DataModuleCombined(LightningDataModule):
             type=str,
             default="What is the drug synergy score of this drug pair in this cell line?",
         )
+        parser.add_argument("--combined_ddi_ood", type=str, default="none", choices=["none", "dynas"])
+        parser.add_argument("--combined_dsp_ood", type=str, default="none", choices=["none", "disen"])
         return parent_parser

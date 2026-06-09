@@ -3,7 +3,6 @@ from typing import Any, Dict
 import torch
 from model.blip2opt import Blip2OPT
 from model.blip2combined import Blip2OPTCombined
-from model.blip2llama import Blip2Llama
 import pytorch_lightning as pl
 from torch import optim
 from lavis.common.optims import LinearWarmupCosineLRScheduler, LinearWarmupStepLRScheduler
@@ -71,6 +70,8 @@ class GraphLLM(pl.LightningModule):
                 self.blip2opt = Blip2OPT(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune, args.peft_dir, args.opt_model, args.prompt, use_nas=args.NAS, args=args)
             self.tokenizer = self.blip2opt.opt_tokenizer
         else:
+            from model.blip2llama import Blip2Llama
+
             if hasattr(args, "combined") and args.combined:
                 raise NotImplementedError("Combined multitask mode currently supports Galactica/Blip2OPT backbones only.")
             self.blip2opt = Blip2Llama(args.bert_name, args.gin_num_layers, args.gin_hidden_dim, args.drop_ratio, args.tune_gnn, args.num_query_token, args.cross_attention_freq, args.llm_tune == 'lora', args.peft_dir, args.opt_model, args.prompt, use_nas=args.NAS, args=args)
@@ -509,4 +510,13 @@ class GraphLLM(pl.LightningModule):
         parser.add_argument('--caption_eval_epoch', type=int, default=10)
         # cell line
         parser.add_argument('--cell_num_features', type=int, default=908)
+        # Combined OOD branches are opt-in so existing checkpoints keep their original module keys.
+        parser.add_argument('--combined_ddi_ood', type=str, default='none', choices=['none', 'dynas'],
+                            help='DDI OOD graph encoder: none keeps V1.0 GIN, dynas enables DyNAS-DDI.')
+        parser.add_argument('--combined_dsp_ood', type=str, default='none', choices=['none', 'disen'],
+                            help='DSP OOD graph encoder: none keeps V1.0 GIN, disen enables OOD-GraphLLM disentangle/env branch.')
+        parser.add_argument('--ddi_ood', type=str, default='none', choices=['none', 'dynas'],
+                            help='Single-task DDI OOD graph encoder.')
+        parser.add_argument('--dsp_ood', type=str, default='none', choices=['none', 'disen'],
+                            help='Single-task DSP OOD graph encoder.')
         return parent_parser

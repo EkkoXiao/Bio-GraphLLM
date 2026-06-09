@@ -11,10 +11,36 @@ from lavis.models.blip2_models.blip2 import (
     # Blip2Base,
     disabled_train,
 )
-from model.blip2 import Blip2Base
+from model.blip2 import Blip2Base, LayerNorm
 from transformers import AutoTokenizer
 from transformers import OPTForCausalLM
 from rdkit import Chem
+from model.dynas import DyNASDDIModel
+
+OOD_ARG_DEFAULTS = {
+    "epsilon": 0.0,
+    "with_conv_linear": False,
+    "num_layers": 3,
+    "pooling_ratio": 0.5,
+    "beta": 5e-3,
+    "gamma": 5e-3,
+    "hidden_size": 128,
+    "graph_dim": 8,
+    "dropout": 0.5,
+    "temp": 0.2,
+    "loc_mean": 10.0,
+    "loc_std": 0.01,
+    "model_type": "darts",
+    "temperature": 1.0,
+    "search_act": False,
+    "target_dim": 1280,
+    "cross_attn_dim": 64,
+    "invariant_dim": 2,
+    "variant_dim": 6,
+    "env": 1,
+    "use_att": False,
+    "att_head": 4,
+}
 
 opt_model_list = [
     "facebook/galactica-125m",
@@ -148,10 +174,12 @@ class Blip2OPT(Blip2Base):
     ):
         super().__init__()
         self.args = args
+        self._ensure_ood_arg_defaults()
         self.use_nas = use_nas
         self.is_cell_line = args.cell
         self.is_cancer = args.cancer
         self.is_string = args.string
+        self.ddi_ood = getattr(args, "ddi_ood", getattr(args, "combined_ddi_ood", "none")).lower()
         self.sslloss_fn = torch.nn.L1Loss()
         self.num_query_token = num_query_token
         if self.use_nas and self.is_cell_line:
@@ -171,6 +199,29 @@ class Blip2OPT(Blip2Base):
                 logging.info("freeze nas encoder")
 
             self.Qformer, self.query_tokens = self.init_Qformer(bert_name, num_query_token, 
+                                                                self.graph_encoder.supernet.hidden_size * (self.graph_encoder.supernet.num_layers + 1), cross_attention_freq)
+        elif self.use_nas and self.ddi_ood == "dynas":
+            self.graph_encoder = DyNASDDIModel(
+                args.input_dim,
+                mol=True,
+                virtual=True,
+                args=args,
+                use_forward=tune_gnn
+            )
+            self.ln_graph = LayerNorm(
+                self.graph_encoder.supernet.hidden_size * (self.graph_encoder.supernet.num_layers + 1)
+            )
+            self.tune_gnn = tune_gnn
+            if not tune_gnn:
+                for name, param in self.graph_encoder.named_parameters():
+                    param.requires_grad = False
+                self.graph_encoder = self.graph_encoder.eval()
+                self.graph_encoder.train = disabled_train
+                logging.info("freeze dynas encoder")
+            else:
+                self._freeze_batch_norm_mode(self.graph_encoder)
+
+            self.Qformer, self.query_tokens = self.init_Qformer(bert_name, num_query_token,
                                                                 self.graph_encoder.supernet.hidden_size * (self.graph_encoder.supernet.num_layers + 1), cross_attention_freq)
         elif self.use_nas:
             self.graph_encoder, self.ln_graph = self.init_nas_encoder(
@@ -290,6 +341,17 @@ class Blip2OPT(Blip2Base):
 
         self.prompt = prompt
 
+    def _ensure_ood_arg_defaults(self):
+        for name, value in OOD_ARG_DEFAULTS.items():
+            if not hasattr(self.args, name):
+                setattr(self.args, name, value)
+
+    def _freeze_batch_norm_mode(self, module):
+        for child in module.modules():
+            if isinstance(child, nn.BatchNorm1d):
+                child.eval()
+                child.train = disabled_train
+
     def forward(self, batch):
         if self.is_cell_line and self.use_nas:
             return self.forwardCellLineTarget(batch)
@@ -303,7 +365,9 @@ class Blip2OPT(Blip2Base):
     def forwardRaw(self, batch):
         graphs1, graphs2, prompt_tokens, text_tokens= batch
         # Process graphs1
-        if self.use_nas:
+        if self.use_nas and self.ddi_ood == "dynas":
+            cosloss1, ssloutput1, graph_embeds1, graph_masks1, cosloss2, ssloutput2, graph_embeds2, graph_masks2 = self.graph_encoder(graphs1, graphs2)
+        elif self.use_nas:
             cosloss1, ssloutput1, graph_embeds1, graph_masks1 = self.graph_encoder(graphs1)
         else:
             graph_embeds1, graph_masks1 = self.graph_encoder(graphs1) 
@@ -322,7 +386,9 @@ class Blip2OPT(Blip2Base):
         mol_tokens1 = self.opt_proj(query_output1.last_hidden_state)
         
         # Process graphs2
-        if self.use_nas:
+        if self.use_nas and self.ddi_ood == "dynas":
+            pass
+        elif self.use_nas:
             cosloss2, ssloutput2, graph_embeds2, graph_masks2 = self.graph_encoder(graphs2)
         else:
             graph_embeds2, graph_masks2 = self.graph_encoder(graphs2) 
@@ -368,10 +434,10 @@ class Blip2OPT(Blip2Base):
         loss = outputs.loss
 
         if self.use_nas:
-            ssltarget1 = graphs1.deratio.view(-1, 3)
+            ssltarget1 = graphs1.deratio.view(-1, 3).to(ssloutput1.device)
             sslloss1 = self.sslloss_fn(ssloutput1, ssltarget1)
 
-            ssltarget2 = graphs2.deratio.view(-1, 3)
+            ssltarget2 = graphs2.deratio.view(-1, 3).to(ssloutput2.device)
             sslloss2 = self.sslloss_fn(ssloutput2, ssltarget2)
 
             sslloss = sslloss1 + sslloss2
@@ -750,8 +816,11 @@ class Blip2OPT(Blip2Base):
         output_scores=False,
     ):
         graphs1 = samples['graphs1']
+        graphs2 = samples['graphs2']
         prompt_tokens = samples['prompt_tokens']
-        if self.use_nas:
+        if self.use_nas and self.ddi_ood == "dynas":
+            _, _, graph_embeds1, graph_masks1, _, _, graph_embeds2, graph_masks2 = self.graph_encoder(graphs1, graphs2)
+        elif self.use_nas:
             cosloss1, ssloutput1, graph_embeds1, graph_masks1 = self.graph_encoder(graphs1)
         else:
             graph_embeds1, graph_masks1 = self.graph_encoder(graphs1) 
@@ -766,8 +835,9 @@ class Blip2OPT(Blip2Base):
         )
         mol_tokens1 = self.opt_proj(query_output1.last_hidden_state)
         
-        graphs2 = samples['graphs2']
-        if self.use_nas:
+        if self.use_nas and self.ddi_ood == "dynas":
+            pass
+        elif self.use_nas:
             cosloss2, ssloutput2, graph_embeds2, graph_masks2 = self.graph_encoder(graphs2)
         else:
             graph_embeds2, graph_masks2 = self.graph_encoder(graphs2) 
